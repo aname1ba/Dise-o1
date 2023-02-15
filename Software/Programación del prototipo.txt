@@ -1,0 +1,202 @@
+define sensorSueloPinAnalogico A0
+#define sensorLluviaPinDigitalPower 8
+#define sensorNivelAguaPinDigital 13
+#define relayPinDigital 9
+#define pulsador2 2
+#define pulsador3 3
+#define pulsador4 4
+#define led5 5
+#define led6 6
+#define led7 7
+int prevpul2 = 2, prespul2 = 2, prevpul3 = 3, prespul3 = 3, prevpul4 = 4, prespul4 = 4;
+int status1 = LOW, status2 = LOW, status3 = LOW;
+float hu_minima = 0.0, hu_necesaria = 0.0, hu_optima = 0.0;
+float HumedadSuelo = 0.0, HumedadAmbiente = 0.0;
+int NivelAgua = 0;
+String cultivo = "";
+void setup() {
+  pinMode(relayPinDigital, OUTPUT);
+  desactivarRiegoAutomatico();
+  pinMode(sensorNivelAguaPinDigital, INPUT);
+  pinMode(sensorLluviaPinDigitalPower, INPUT);
+  pinMode(led5, OUTPUT);
+  pinMode(led6, OUTPUT);
+  pinMode(led7, OUTPUT);
+  pinMode(pulsador2, INPUT_PULLUP);
+  pinMode(pulsador3, INPUT_PULLUP);
+  pinMode(pulsador4, INPUT_PULLUP);
+  prespul2 = digitalRead(pulsador2);
+  prespul3 = digitalRead(pulsador3);
+  prespul4 = digitalRead(pulsador4);
+  Serial.begin(9600);
+}
+
+void loop() {
+  while (cultivo == "") {
+    prevpul2 = prespul2;
+    prespul2 = digitalRead(pulsador2);
+    prevpul3 = prespul3;
+    prespul3 = digitalRead(pulsador3);
+    prevpul4 = prespul4;
+    prespul4 = digitalRead(pulsador4);
+
+    if (prevpul2 == HIGH && prespul2 == LOW) {
+      indicadorPapa();
+    }
+    if (prevpul3 == HIGH && prespul3 == LOW) {
+      indicadorYuca();
+    }
+    if (prevpul4 == HIGH && prespul4 == LOW) {
+      indicadorCanihua();
+    }
+  }
+
+  Serial.println(cultivo);
+  HumedadSuelo = map(analogRead(sensorSueloPinAnalogico), 0, 1023, 100, 0);
+  Serial.print("Humedad suelo: ");
+  Serial.print(HumedadSuelo);
+  Serial.println(" %");
+
+  HumedadAmbiente = readSensor();
+  Serial.print("Valor del sensor: ");
+  Serial.println(HumedadAmbiente);
+  if (HumedadAmbiente == 0) {
+    Serial.println("No llueve");
+  } else {
+    Serial.println("Lloviendo");
+  }
+
+  NivelAgua = nivelAgua();
+  if (NivelAgua == 0) {
+    Serial.print("Nivel de agua regular: ");
+    Serial.println(NivelAgua);
+  } else {
+    Serial.print("Nivel de agua baja: ");
+    Serial.println(NivelAgua);
+  }
+
+  if (cultivo == "Papa") {
+    hu_minima = 9.36;
+    hu_necesaria = 19.29;
+    hu_optima = 29.22;
+    verificarLluvia();
+  } else if (cultivo == "Yuca") {
+    hu_minima = 9.36;
+    hu_necesaria = 13.25;
+    hu_optima = 17.14;
+    verificarLluvia();
+  } else {
+    hu_minima = 13.12;
+    hu_necesaria = 17.13;
+    hu_optima = 21.15;
+    verificarLluvia();
+  }
+  delay(1000);
+}
+
+int readSensor() {
+  return digitalRead(sensorLluviaPinDigitalPower);
+}
+
+void activarRiegoAutomatico() {
+  digitalWrite(relayPinDigital, HIGH);
+  Serial.println("Válvula activada");
+  delay(2000);
+}
+
+void desactivarRiegoAutomatico() {
+  digitalWrite(relayPinDigital, LOW);
+  Serial.println("Válvula desactivada");
+  delay(2000);
+}
+
+void humedadNecesaria() {
+  if (HumedadSuelo <= hu_necesaria) {
+    activarRiegoAutomatico();
+  } else {
+    desactivarRiegoAutomatico();
+  }
+
+  if (digitalRead(relayPinDigital) == HIGH) {
+    Serial.println("Abrir válvula");
+    if (nivelAgua() == 0) {
+      humedadNecesaria();
+    }
+  } else {
+    Serial.println("Cerrar válvula");
+  }
+  if (HumedadAmbiente == 1) {
+    desactivarRiegoAutomatico();
+  }
+}
+
+void humedadOptima() {
+  if (HumedadSuelo >= hu_optima) {
+    desactivarRiegoAutomatico();
+  } else {
+    activarRiegoAutomatico();
+  }
+
+  if (digitalRead(relayPinDigital) == HIGH) {
+    Serial.println("Abrir válvula");
+    if (nivelAgua() == 0) {
+      humedadOptima();
+    } else {
+      humedadNecesaria();
+    }
+  } else {
+    Serial.println("Cerrar válvula");
+  }
+  if (HumedadAmbiente == 1) {
+    desactivarRiegoAutomatico();
+  }
+}
+
+int nivelAgua() {
+  return digitalRead(sensorNivelAguaPinDigital);
+}
+
+void humedadMinima() {
+  if (HumedadSuelo <= hu_minima) {
+    if (nivelAgua() == 0) {
+      humedadOptima();
+    } else {
+      humedadNecesaria();
+    }
+  } else {
+    desactivarRiegoAutomatico();
+    humedadMinima();
+  }
+}
+
+void verificarLluvia() {
+  if (HumedadAmbiente == 1) {
+    desactivarRiegoAutomatico();
+  } else {
+    humedadMinima();
+  }
+}
+
+void indicadorPapa() {
+  cultivo = "Papa";
+  status1 = !status1;
+  digitalWrite(led5, status1);
+  digitalWrite(led6, LOW);
+  digitalWrite(led7, LOW);
+}
+
+void indicadorYuca() {
+  cultivo = "Yuca";
+  status2 = !status2;
+  digitalWrite(led6, status2);
+  digitalWrite(led5, LOW);
+  digitalWrite(led7, LOW);
+}
+
+void indicadorCanihua() {
+  cultivo = "Cañihua";
+  status3 = !status3;
+  digitalWrite(led7, status3);
+  digitalWrite(led5, LOW);
+  digitalWrite(led6, LOW);
+}
